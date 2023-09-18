@@ -8,7 +8,9 @@ from rclpy.time import Time
 from rclpy.node import Node
 from std_msgs.msg import Header
 from sensor_msgs.msg import LaserScan
-from geometry_msgs.msg import PoseWithCovarianceStamped, PoseArray, Pose, Point, Quaternion
+from nav2_msgs.msg import ParticleCloud, Particle
+from nav2_msgs.msg import Particle as Nav2Particle
+from geometry_msgs.msg import PoseWithCovarianceStamped, Pose, Point, Quaternion
 from rclpy.duration import Duration
 import math
 import time
@@ -85,7 +87,7 @@ class ParticleFilter(Node):
         self.create_subscription(PoseWithCovarianceStamped, 'initialpose', self.update_initial_pose, 10)
 
         # publish the current particle cloud.  This enables viewing particles in rviz.
-        self.particle_pub = self.create_publisher(PoseArray, "particlecloud", qos_profile_sensor_data)
+        self.particle_pub = self.create_publisher(ParticleCloud, "particle_cloud", qos_profile_sensor_data)
 
         # laser_subscriber listens for data from the lidar
         self.create_subscription(LaserScan, self.scan_topic, self.scan_received, 10)
@@ -255,14 +257,12 @@ class ParticleFilter(Node):
         pass
 
     def publish_particles(self, timestamp):
-        particles_conv = []
+        msg = ParticleCloud()
+        msg.header.frame_id = self.map_frame
+        msg.header.stamp = timestamp
         for p in self.particle_cloud:
-            particles_conv.append(p.as_pose())
-        # actually send the message so that we can view it in rviz
-        self.particle_pub.publish(PoseArray(header=Header(stamp=timestamp,
-                                            frame_id=self.map_frame),
-                                  poses=particles_conv))
-
+            msg.particles.append(Nav2Particle(pose=p.as_pose(), weight=p.w))
+        self.particle_pub.publish(msg)
 
     def scan_received(self, msg):
         self.last_scan_timestamp = msg.header.stamp
