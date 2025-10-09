@@ -82,6 +82,7 @@ class ParticleFilter(Node):
         self.a_thresh = math.pi/6       # the amount of angular movement before performing an update
 
         # TODO: define additional constants if needed
+        self.sampling_noise_std_dev = 0.1
 
         # pose_listener responds to selection of a new approximate robot location (for instance using rviz)
         self.create_subscription(PoseWithCovarianceStamped, 'initialpose', self.update_initial_pose, 10)
@@ -186,7 +187,15 @@ class ParticleFilter(Node):
 
         # TODO: assign the latest pose into self.robot_pose as a geometry_msgs.Pose object
         # just to get started we will fix the robot's pose to always be at the origin
-        self.robot_pose = Pose()
+        # Grab the particle with the highest weight and use that as the pose
+        most_likely_particle = max(self.particle_cloud, key=lambda p: p.w)
+
+        robot_position = Point(x = most_likely_particle.x, y = most_likely_particle.y, z = 0.0)
+        quaternion = quaternion_from_euler(0.0, 0.0, most_likely_particle.theta)
+        robot_orientation = Quaternion(x = quaternion[0], y = quaternion[1], z = quaternion[2], w = quaternion[3])
+
+        self.robot_pose = Pose(position = robot_position, orientation = robot_orientation)
+
         if hasattr(self, 'odom_pose'):
             self.transform_helper.fix_map_to_odom_transform(self.robot_pose,
                                                             self.odom_pose)
@@ -213,6 +222,13 @@ class ParticleFilter(Node):
             return
 
         # TODO: modify particles using delta
+        # Add the delta to each particle
+        # TODO Add some jitter as well since odom isn't perfect.
+
+        for particle in self.particle_cloud:
+            particle.x += delta[0]
+            particle.y += delta[1]
+            particle.theta += delta[2]
 
     def resample_particles(self):
         """ Resample the particles according to the new particle weights.
@@ -223,6 +239,8 @@ class ParticleFilter(Node):
         # make sure the distribution is normalized
         self.normalize_particles()
         # TODO: fill out the rest of the implementation
+        # sample a new set of particles according to the weights of old particles
+        # Use draw_random_sample helper function
 
     def update_particles_with_laser(self, r, theta):
         """ Updates the particle weights in response to the scan data
@@ -230,6 +248,8 @@ class ParticleFilter(Node):
             theta: the angle relative to the robot frame for each corresponding reading 
         """
         # TODO: implement this
+        # Use that one helper function to get distances at each scan angle (?)
+        # Compare to actual distance measurements from the lidar
         pass
 
     def update_initial_pose(self, msg):
@@ -246,7 +266,16 @@ class ParticleFilter(Node):
         if xy_theta is None:
             xy_theta = self.transform_helper.convert_pose_to_xy_and_theta(self.odom_pose)
         self.particle_cloud = []
+
+        # Initialize n particles around the initial guess
+        for i in range(self.n_particles):
+            x = xy_theta[0] + np.random.normal(0, self.sampling_noise_std_dev)
+            y = xy_theta[1] + np.random.normal(0, self.sampling_noise_std_dev)
+            theta = xy_theta[2] + np.random.normal(0, self.sampling_noise_std_dev)
+            self.particle_cloud.append(Particle(x, y, theta))
         # TODO create particles
+        # This runs on the first loop of the algorithm
+        # maybe later initialize particles randomly
 
         self.normalize_particles()
         self.update_robot_pose()
@@ -254,7 +283,10 @@ class ParticleFilter(Node):
     def normalize_particles(self):
         """ Make sure the particle weights define a valid distribution (i.e. sum to 1.0) """
         # TODO: implement this
-        pass
+        # Take all the weights, add them, then divide each weight by the sum
+        weight_sum = sum(particle.w for particle in self.particle_cloud)
+        for particle in self.particle_cloud:
+            particle.w = particle.w / weight_sum
 
     def publish_particles(self, timestamp):
         msg = ParticleCloud()
