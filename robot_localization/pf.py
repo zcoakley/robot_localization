@@ -82,7 +82,7 @@ class ParticleFilter(Node):
         self.a_thresh = math.pi/6       # the amount of angular movement before performing an update
 
         # TODO: define additional constants if needed
-        self.sampling_noise_std_dev = 0.1
+        self.sampling_xy_noise_std_dev = 0.1
 
         # pose_listener responds to selection of a new approximate robot location (for instance using rviz)
         self.create_subscription(PoseWithCovarianceStamped, 'initialpose', self.update_initial_pose, 10)
@@ -225,10 +225,16 @@ class ParticleFilter(Node):
         # Add the delta to each particle
         # TODO Add some jitter as well since odom isn't perfect.
 
+        # Rotate the x and y deltas so the particle moves relative to its heading
+        x, y, theta = delta[0], delta[1], delta[2]
+
         for particle in self.particle_cloud:
-            particle.x += delta[0]
-            particle.y += delta[1]
-            particle.theta += delta[2]
+            x_rotated = math.cos(particle.theta) * x - math.sin(particle.theta) * y
+            y_rotated = math.sin(particle.theta) * x + math.cos(particle.theta) * y
+
+            particle.x += x_rotated
+            particle.y += y_rotated
+            particle.theta += theta
 
     def resample_particles(self):
         """ Resample the particles according to the new particle weights.
@@ -268,10 +274,10 @@ class ParticleFilter(Node):
         self.particle_cloud = []
 
         # Initialize n particles around the initial guess
-        for i in range(self.n_particles):
-            x = xy_theta[0] + np.random.normal(0, self.sampling_noise_std_dev)
-            y = xy_theta[1] + np.random.normal(0, self.sampling_noise_std_dev)
-            theta = xy_theta[2] + np.random.normal(0, self.sampling_noise_std_dev)
+        for _ in range(self.n_particles):
+            x = xy_theta[0] + np.random.normal(0, self.sampling_xy_noise_std_dev)
+            y = xy_theta[1] + np.random.normal(0, self.sampling_xy_noise_std_dev)
+            theta = np.random.uniform(0, 2 * np.pi)
             self.particle_cloud.append(Particle(x, y, theta))
         # TODO create particles
         # This runs on the first loop of the algorithm
