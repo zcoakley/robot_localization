@@ -225,15 +225,30 @@ class ParticleFilter(Node):
         # Add the delta to each particle
         # TODO Add some jitter as well since odom isn't perfect.
 
-        # Rotate the x and y deltas so the particle moves relative to its heading
         x, y, theta = delta[0], delta[1], delta[2]
 
-        for particle in self.particle_cloud:
-            x_rotated = math.cos(particle.theta) * x - math.sin(particle.theta) * y
-            y_rotated = math.sin(particle.theta) * x + math.cos(particle.theta) * y
+        # Calculate the forward distance the robot has moved
+        d = math.sqrt(x**2 + y**2)
 
-            particle.x += x_rotated
-            particle.y += y_rotated
+        for particle in self.particle_cloud:
+            # x_rotated = math.cos(particle.theta) * x - math.sin(particle.theta) * y
+            # y_rotated = math.sin(particle.theta) * x + math.cos(particle.theta) * y
+
+            # Calculate the heading of the robot's movement vector relative to its previous heading
+            # This is not the same as the the change in theta
+            theta_turn = math.atan2(y, x) - old_odom_xy_theta[2]
+
+            # Create vector of length d pointing in the y direction in the global frame
+            # Assuming pos x axis is zero radians here
+            movement_vector = [d, 0]
+
+            # Rotate vector to point in the same direction as the particle, then rotate again to match the rotation of the robot
+            particle_xy_new = [0,0]
+            particle_xy_new[0] = math.cos(particle.theta + theta_turn) * movement_vector[0] - math.sin(particle.theta + theta_turn) * movement_vector[1]
+            particle_xy_new[1] = math.sin(particle.theta + theta_turn) * movement_vector[0] + math.cos(particle.theta + theta_turn) * movement_vector[1]
+
+            particle.x += particle_xy_new[0]
+            particle.y += particle_xy_new[1]
             particle.theta += theta
 
     def resample_particles(self):
