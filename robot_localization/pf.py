@@ -19,6 +19,8 @@ from occupancy_field import OccupancyField
 from helper_functions import TFHelper
 from rclpy.qos import qos_profile_sensor_data
 from angle_helpers import quaternion_from_euler
+import random
+from helper_functions import draw_random_sample
 
 class Particle(object):
     """ Represents a hypothesis (particle) of the robot's pose consisting of x,y and theta (yaw)
@@ -257,21 +259,58 @@ class ParticleFilter(Node):
             particle is selected in the resampling step.  You may want to make use of the given helper
             function draw_random_sample in helper_functions.py.
         """
-        # make sure the distribution is normalized
         self.normalize_particles()
-        # TODO: fill out the rest of the implementation
-        # sample a new set of particles according to the weights of old particles
-        # Use draw_random_sample helper function
+        new_particle_cloud = []
+
+        # Draw 1/3 of the new particles completely randomly
+        for i in range(self.n_particles/3): 
+            x = random.randint(0, self.x_bound)
+            y = random.randint(0, self.y_bound)
+            theta = random.randrange(0-math.pi, math.pi)
+            new_particle = Particle(x, y, theta, 1)
+            new_particle_cloud.append(new_particle)
+
+        # Draw 1/3 of the new particles from the existing particle cloud
+        weights_array = [particle.w for particle in self.particle_cloud]
+        reselected_particles = draw_random_sample(self.particle_cloud, weights_array, (self.n_particles/3)) 
+        new_particle_cloud.append(reselected_particles)
+
+        # Draw 1/3 of the new particles randomly in the vicinity of existing particles
+        ((x_lower, x_upper), (y_lower, y_upper)) = self.occupancy_field.get_obstacle_bounding_box()
+        std_dev_dist = 10
+        std_dev_angle = 2
+        reference_particles = draw_random_sample(self.particle_cloud, weights_array, self.n_particles/3)
+        for particle in reference_particles:
+            while True:
+                relative_dist = random.gauss(0, std_dev_dist)        
+                relative_angle = random.gauss(0, std_dev_angle)
+                theta = particle.theta + relative_angle*(math.pi/180)
+                x = particle.x + relative_dist*math.cos(theta)
+                y = particle.y + relative_dist*math.sin(theta)
+                if (x <= x_upper and y <= y_upper and x >= x_lower and y >= y_lower):
+                    break
+            new_particle = Particle(x, y, theta, 1)
+            new_particle_cloud.append(new_particle)
+
+        self.particle_cloud = new_particle_cloud
 
     def update_particles_with_laser(self, r, theta):
         """ Updates the particle weights in response to the scan data
             r: the distance readings to obstacles
             theta: the angle relative to the robot frame for each corresponding reading 
         """
-        # TODO: implement this
-        # Use that one helper function to get distances at each scan angle (?)
-        # Compare to actual distance measurements from the lidar
-        pass
+        # Calculate the difference between the nearest obstacle's distance for the scan and for each particle
+        min_dist_diffs = []
+        min_dist_scan = min(r)
+        for particle in self.particle_cloud:
+            min_dist_particle = self.occupancy_field.get_closest_obstacle_distance(particle.x, particle.y)
+            min_dist_diffs.append(abs(min_dist_scan-min_dist_particle))
+
+        # Set the weight of each particle according to how different the obstacle distances and angles are
+        max_diff = max(min_dist_diffs)
+        for i in range(self.n_particles):
+            # The particle with the highest obstacle distance difference from the scan will have a weight of zero
+            particle.w = max_diff-min_dist_diffs(i)
 
     def update_initial_pose(self, msg):
         """ Callback function to handle re-initializing the particle filter based on a pose estimate.
