@@ -266,8 +266,8 @@ class ParticleFilter(Node):
 
         # Draw 1/3 of the new particles completely randomly
         for i in range(int(self.n_particles/3)): 
-            x = random.randint(x_lower, x_upper)
-            y = random.randint(y_lower, y_upper)
+            x = random.randint(int(x_lower), int(x_upper))
+            y = random.randint(int(y_lower), int(y_upper))
             theta = random.randrange(0-math.pi, math.pi)
             new_particle = Particle(x, y, theta, 1)
             new_particle_cloud.append(new_particle)
