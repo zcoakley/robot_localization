@@ -262,11 +262,12 @@ class ParticleFilter(Node):
         """
         self.normalize_particles()
         new_particle_cloud = []
+        ((x_lower, x_upper), (y_lower, y_upper)) = self.occupancy_field.get_obstacle_bounding_box()
 
         # Draw 1/3 of the new particles completely randomly
         for i in range(self.n_particles/3): 
-            x = random.randint(0, self.x_bound)
-            y = random.randint(0, self.y_bound)
+            x = random.randint(x_lower, x_upper)
+            y = random.randint(y_lower, y_upper)
             theta = random.randrange(0-math.pi, math.pi)
             new_particle = Particle(x, y, theta, 1)
             new_particle_cloud.append(new_particle)
@@ -277,8 +278,7 @@ class ParticleFilter(Node):
         new_particle_cloud.append(reselected_particles)
 
         # Draw 1/3 of the new particles randomly in the vicinity of existing particles
-        ((x_lower, x_upper), (y_lower, y_upper)) = self.occupancy_field.get_obstacle_bounding_box()
-        std_dev_dist = 10
+        std_dev_dist = 5
         std_dev_angle = 2
         reference_particles = draw_random_sample(self.particle_cloud, weights_array, self.n_particles/3)
         for particle in reference_particles:
