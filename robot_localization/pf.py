@@ -265,7 +265,7 @@ class ParticleFilter(Node):
         ((x_lower, x_upper), (y_lower, y_upper)) = self.occupancy_field.get_obstacle_bounding_box()
 
         # Draw 1/3 of the new particles completely randomly
-        for i in range(self.n_particles/3): 
+        for i in range(int(self.n_particles/3)): 
             x = random.randint(x_lower, x_upper)
             y = random.randint(y_lower, y_upper)
             theta = random.randrange(0-math.pi, math.pi)
