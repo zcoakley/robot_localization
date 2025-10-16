@@ -250,9 +250,9 @@ class ParticleFilter(Node):
             particle_xy_new[0] = math.cos(particle.theta + theta_turn) * movement_vector[0] - math.sin(particle.theta + theta_turn) * movement_vector[1]
             particle_xy_new[1] = math.sin(particle.theta + theta_turn) * movement_vector[0] + math.cos(particle.theta + theta_turn) * movement_vector[1]
 
-           particle.x += particle_xy_new[0] + np.random.normal(0, self.odom_update_noise_std_dev)
-           particle.y += particle_xy_new[1] + np.random.normal(0, self.odom_update_noise_std_dev)
-           particle.theta += theta + np.random.normal(0, self.odom_update_noise_std_dev)
+            particle.x += particle_xy_new[0] + np.random.normal(0, self.odom_update_noise_std_dev)
+            particle.y += particle_xy_new[1] + np.random.normal(0, self.odom_update_noise_std_dev)
+            particle.theta += theta + np.random.normal(0, self.odom_update_noise_std_dev)
 
     def resample_particles(self):
         """ Resample the particles according to the new particle weights.
@@ -311,7 +311,7 @@ class ParticleFilter(Node):
         max_diff = max(min_dist_diffs)
         for i in range(self.n_particles):
             # The particle with the highest obstacle distance difference from the scan will have a weight of zero
-            particle.w = max_diff-min_dist_diffs(i)
+            particle.w = max_diff-min_dist_diffs[i]
 
     def update_initial_pose(self, msg):
         """ Callback function to handle re-initializing the particle filter based on a pose estimate.
