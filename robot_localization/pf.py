@@ -274,13 +274,13 @@ class ParticleFilter(Node):
 
         # Draw 1/3 of the new particles from the existing particle cloud
         weights_array = [particle.w for particle in self.particle_cloud]
-        reselected_particles = draw_random_sample(self.particle_cloud, weights_array, (self.n_particles/3)) 
+        reselected_particles = draw_random_sample(self.particle_cloud, weights_array, (int(self.n_particles/3))) 
         new_particle_cloud.append(reselected_particles)
 
         # Draw 1/3 of the new particles randomly in the vicinity of existing particles
         std_dev_dist = 5
         std_dev_angle = 2
-        reference_particles = draw_random_sample(self.particle_cloud, weights_array, self.n_particles/3)
+        reference_particles = draw_random_sample(self.particle_cloud, weights_array, int(self.n_particles/3))
         for particle in reference_particles:
             while True:
                 relative_dist = random.gauss(0, std_dev_dist)        
