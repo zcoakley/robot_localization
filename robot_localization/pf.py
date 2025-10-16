@@ -151,19 +151,23 @@ class ParticleFilter(Node):
             return
         
         (r, theta) = self.transform_helper.convert_scan_to_polar_in_robot_frame(msg, self.base_frame)
-        print("r[0]={0}, theta[0]={1}".format(r[0], theta[0]))
+        # print("r[0]={0}, theta[0]={1}".format(r[0], theta[0]))
         # clear the current scan so that we can process the next one
         self.scan_to_process = None
 
         self.odom_pose = new_pose
         new_odom_xy_theta = self.transform_helper.convert_pose_to_xy_and_theta(self.odom_pose)
-        print("x: {0}, y: {1}, yaw: {2}".format(*new_odom_xy_theta))
+        # print("x: {0}, y: {1}, yaw: {2}".format(*new_odom_xy_theta))
 
         if not self.current_odom_xy_theta:
             self.current_odom_xy_theta = new_odom_xy_theta
         elif not self.particle_cloud:
             # now that we have all of the necessary transforms we can update the particle cloud
             self.initialize_particle_cloud(msg.header.stamp)
+            print("Particle weights at init: ", [particle.w for particle in self.particle_cloud[:10]])
+            print("laser scane r", r)
+            print("laser scan r length", len(r))
+            
         elif self.moved_far_enough_to_update(new_odom_xy_theta):
             # we have moved far enough to do an update!
             self.update_particles_with_odom()    # update based on odometry
@@ -268,7 +272,7 @@ class ParticleFilter(Node):
         for i in range(int(self.n_particles/3)): 
             x = random.randint(int(x_lower), int(x_upper))
             y = random.randint(int(y_lower), int(y_upper))
-            theta = (random.random()*2*math.pi())-math.pi()
+            theta = (random.random()*2*math.pi)-math.pi
             new_particle = Particle(x, y, theta, 1)
             new_particle_cloud.append(new_particle)
 
@@ -300,9 +304,15 @@ class ParticleFilter(Node):
             r: the distance readings to obstacles
             theta: the angle relative to the robot frame for each corresponding reading 
         """
+        print("Particle weights before: ", [particle.w for particle in self.particle_cloud[:10]])
+
         # Calculate the difference between the distance from the nearest obstacle in the scan and in the map for each particle
         min_dist_diffs = []
         min_dist_scan = min(r) # minimum lidar value from robot scan
+        min_dist_scan_angle = r.index(min_dist_scan)
+
+        print("laser scane r", r)
+        print("min dist scan angle", min_dist_scan_angle)
         for particle in self.particle_cloud:
             min_dist_particle = self.occupancy_field.get_closest_obstacle_distance(particle.x, particle.y)
             min_dist_diffs.append(abs(min_dist_scan - min_dist_particle))
@@ -313,6 +323,8 @@ class ParticleFilter(Node):
             # The particle with the highest obstacle distance difference from the scan will have a weight of zero
             # Other particles will have higer weights
             self.particle_cloud[i].w = max_diff-min_dist_diffs[i]
+
+        print("Particle weights after update: ", [particle.w for particle in self.particle_cloud[:10]])
 
     def update_initial_pose(self, msg):
         """ Callback function to handle re-initializing the particle filter based on a pose estimate.
