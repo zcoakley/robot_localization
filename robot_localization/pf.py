@@ -300,18 +300,19 @@ class ParticleFilter(Node):
             r: the distance readings to obstacles
             theta: the angle relative to the robot frame for each corresponding reading 
         """
-        # Calculate the difference between the nearest obstacle's distance for the scan and for each particle
+        # Calculate the difference between the distance from the nearest obstacle in the scan and in the map for each particle
         min_dist_diffs = []
-        min_dist_scan = min(r)
+        min_dist_scan = min(r) # minimum lidar value from robot scan
         for particle in self.particle_cloud:
             min_dist_particle = self.occupancy_field.get_closest_obstacle_distance(particle.x, particle.y)
-            min_dist_diffs.append(abs(min_dist_scan-min_dist_particle))
+            min_dist_diffs.append(abs(min_dist_scan - min_dist_particle))
 
-        # Set the weight of each particle according to how different the obstacle distances and angles are
+        # Set the weight of each particle according to how different the obstacle distances are
         max_diff = max(min_dist_diffs)
         for i in range(self.n_particles):
             # The particle with the highest obstacle distance difference from the scan will have a weight of zero
-            particle.w = max_diff-min_dist_diffs[i]
+            # Other particles will have higer weights
+            self.particle_cloud[i].w = max_diff-min_dist_diffs[i]
 
     def update_initial_pose(self, msg):
         """ Callback function to handle re-initializing the particle filter based on a pose estimate.
