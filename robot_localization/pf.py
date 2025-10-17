@@ -86,6 +86,8 @@ class ParticleFilter(Node):
         # TODO: define additional constants if needed
         self.sampling_xy_noise_std_dev = 0.1
         self.odom_update_noise_std_dev = 0.1
+        self.resampling_dist_std_dev = 0.05
+        self.resampling_angle_std_dev = 0.2
 
         # pose_listener responds to selection of a new approximate robot location (for instance using rviz)
         self.create_subscription(PoseWithCovarianceStamped, 'initialpose', self.update_initial_pose, 10)
@@ -164,9 +166,9 @@ class ParticleFilter(Node):
         elif not self.particle_cloud:
             # now that we have all of the necessary transforms we can update the particle cloud
             self.initialize_particle_cloud(msg.header.stamp)
-            print("Particle weights at init: ", [particle.w for particle in self.particle_cloud[:10]])
-            print("laser scane r", r)
-            print("laser scan r length", len(r))
+            # print("Particle weights at init: ", [particle.w for particle in self.particle_cloud[:10]])
+            # print("laser scane r", r)
+            # print("laser scan r length", len(r))
             
         elif self.moved_far_enough_to_update(new_odom_xy_theta):
             # we have moved far enough to do an update!
@@ -192,8 +194,6 @@ class ParticleFilter(Node):
         # first make sure that the particle weights are normalized
         self.normalize_particles()
 
-        # TODO: assign the latest pose into self.robot_pose as a geometry_msgs.Pose object
-        # just to get started we will fix the robot's pose to always be at the origin
         # Grab the particle with the highest weight and use that as the pose
         most_likely_particle = max(self.particle_cloud, key=lambda p: p.w)
 
@@ -228,10 +228,6 @@ class ParticleFilter(Node):
             self.current_odom_xy_theta = new_odom_xy_theta
             return
 
-        # TODO: modify particles using delta
-        # Add the delta to each particle
-        # TODO Add some jitter as well since odom isn't perfect.
-
         x, y, theta = delta[0], delta[1], delta[2]
 
         # Calculate the forward distance the robot has moved
@@ -254,9 +250,11 @@ class ParticleFilter(Node):
             particle_xy_new[0] = math.cos(particle.theta + theta_turn) * movement_vector[0] - math.sin(particle.theta + theta_turn) * movement_vector[1]
             particle_xy_new[1] = math.sin(particle.theta + theta_turn) * movement_vector[0] + math.cos(particle.theta + theta_turn) * movement_vector[1]
 
-            particle.x += particle_xy_new[0] + np.random.normal(0, self.odom_update_noise_std_dev)
-            particle.y += particle_xy_new[1] + np.random.normal(0, self.odom_update_noise_std_dev)
-            particle.theta += theta + np.random.normal(0, self.odom_update_noise_std_dev)
+
+            # TODO add back noise when done debugging!
+            particle.x += particle_xy_new[0] #+ np.random.normal(0, self.odom_update_noise_std_dev)
+            particle.y += particle_xy_new[1] #+ np.random.normal(0, self.odom_update_noise_std_dev)
+            particle.theta += theta #+ np.random.normal(0, self.odom_update_noise_std_dev)
 
     def resample_particles(self):
         """ Resample the particles according to the new particle weights.
@@ -267,34 +265,36 @@ class ParticleFilter(Node):
         self.normalize_particles()
         new_particle_cloud = []
         ((x_lower, x_upper), (y_lower, y_upper)) = self.occupancy_field.get_obstacle_bounding_box()
-
-        # Draw 1/3 of the new particles completely randomly
-        for i in range(int(self.n_particles/3)): 
-            x = random.randint(int(x_lower), int(x_upper))
-            y = random.randint(int(y_lower), int(y_upper))
-            theta = (random.random()*2*math.pi)-math.pi
-            new_particle = Particle(x, y, theta, 1)
-            new_particle_cloud.append(new_particle)
-
-        # Draw 1/3 of the new particles from the existing particle cloud
         weights_array = [particle.w for particle in self.particle_cloud]
-        reselected_particles = draw_random_sample(self.particle_cloud, weights_array, (int(self.n_particles/3))) 
-        new_particle_cloud.append(reselected_particles)
+
+        # # Draw 1/3 of the new particles completely randomly
+        # for i in range(int(self.n_particles // 10)):
+        #     x = random.randint(int(x_lower), int(x_upper))
+        #     y = random.randint(int(y_lower), int(y_upper))
+        #     theta = (random.random()*2*math.pi)-math.pi
+        #     new_particle = Particle(x, y, theta, 1)
+        #     new_particle_cloud.append(new_particle)
+
+        # # Draw 1/3 of the new particles from the existing particle cloud
+        # reselected_particles = draw_random_sample(self.particle_cloud, weights_array, self.n_particles) # int(self.n_particles // 3)
+        # new_particle_cloud.extend(reselected_particles)
+
+        # # Calculate remaining number of particles to sample
+        num_remaining_particles = self.n_particles #- 2*int(self.n_particles // 10)
 
         # Draw 1/3 of the new particles randomly in the vicinity of existing particles
-        std_dev_dist = 5
-        std_dev_angle = 2
-        reference_particles = draw_random_sample(self.particle_cloud, weights_array, int(self.n_particles/3))
+        reference_particles = draw_random_sample(self.particle_cloud, weights_array, num_remaining_particles)
         for particle in reference_particles:
-            while True:
-                relative_dist = random.gauss(0, std_dev_dist)        
-                relative_angle = random.gauss(0, std_dev_angle)
+            max_attempts = 100
+            for _ in range(max_attempts):
+                relative_dist = random.gauss(0, self.resampling_dist_std_dev)
+                relative_angle = random.gauss(0, self.resampling_angle_std_dev)
                 theta = particle.theta + relative_angle*(math.pi/180)
                 x = particle.x + relative_dist*math.cos(theta)
                 y = particle.y + relative_dist*math.sin(theta)
-                if (x <= x_upper and y <= y_upper and x >= x_lower and y >= y_lower):
+                if (x_lower <= x <= x_upper and y_lower <= y <= y_upper):
                     break
-            new_particle = Particle(x, y, theta, 1)
+            new_particle = Particle(float(x), float(y), float(theta), float(1))
             new_particle_cloud.append(new_particle)
 
         self.particle_cloud = new_particle_cloud
@@ -304,27 +304,27 @@ class ParticleFilter(Node):
             r: the distance readings to obstacles
             theta: the angle relative to the robot frame for each corresponding reading 
         """
-        print("Particle weights before: ", [particle.w for particle in self.particle_cloud[:10]])
+        # print("Particle weights before: ", [particle.w for particle in self.particle_cloud[:10]])
 
-        # Calculate the difference between the distance from the nearest obstacle in the scan and in the map for each particle
-        min_dist_diffs = []
-        min_dist_scan = min(r) # minimum lidar value from robot scan
-        min_dist_scan_angle = r.index(min_dist_scan)
+        # # Calculate the difference between the distance from the nearest obstacle in the scan and in the map for each particle
+        # min_dist_diffs = []
+        # min_dist_scan = min(r) # minimum lidar value from robot scan
+        # min_dist_scan_angle = r.index(min_dist_scan)
 
-        print("laser scane r", r)
-        print("min dist scan angle", min_dist_scan_angle)
-        for particle in self.particle_cloud:
-            min_dist_particle = self.occupancy_field.get_closest_obstacle_distance(particle.x, particle.y)
-            min_dist_diffs.append(abs(min_dist_scan - min_dist_particle))
+        # print("laser scane r", r)
+        # print("min dist scan angle", min_dist_scan_angle)
+        # for particle in self.particle_cloud:
+        #     min_dist_particle = self.occupancy_field.get_closest_obstacle_distance(particle.x, particle.y)
+        #     min_dist_diffs.append(abs(min_dist_scan - min_dist_particle))
 
-        # Set the weight of each particle according to how different the obstacle distances are
-        max_diff = max(min_dist_diffs)
-        for i in range(self.n_particles):
-            # The particle with the highest obstacle distance difference from the scan will have a weight of zero
-            # Other particles will have higer weights
-            self.particle_cloud[i].w = max_diff-min_dist_diffs[i]
+        # # Set the weight of each particle according to how different the obstacle distances are
+        # max_diff = max(min_dist_diffs)
+        # for i in range(self.n_particles):
+        #     # The particle with the highest obstacle distance difference from the scan will have a weight of zero
+        #     # Other particles will have higer weights
+        #     self.particle_cloud[i].w = max_diff-min_dist_diffs[i]
 
-        print("Particle weights after update: ", [particle.w for particle in self.particle_cloud[:10]])
+        # print("Particle weights after update: ", [particle.w for particle in self.particle_cloud[:10]])
 
     def update_initial_pose(self, msg):
         """ Callback function to handle re-initializing the particle filter based on a pose estimate.
