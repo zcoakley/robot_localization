@@ -88,6 +88,8 @@ class ParticleFilter(Node):
         self.odom_update_noise_std_dev = 0.1
         self.resampling_dist_std_dev = 0.05
         self.resampling_angle_std_dev = 0.2
+        # The portion of particles to be resampled randomly within the map
+        self.resampling_portion_random = 0.05
 
         # pose_listener responds to selection of a new approximate robot location (for instance using rviz)
         self.create_subscription(PoseWithCovarianceStamped, 'initialpose', self.update_initial_pose, 10)
@@ -266,23 +268,20 @@ class ParticleFilter(Node):
         new_particle_cloud = []
         ((x_lower, x_upper), (y_lower, y_upper)) = self.occupancy_field.get_obstacle_bounding_box()
         weights_array = [particle.w for particle in self.particle_cloud]
+        num_random_particles = math.floor(self.n_particles * self.resampling_portion_random)
 
-        # # Draw 1/3 of the new particles completely randomly
-        # for i in range(int(self.n_particles // 10)):
-        #     x = random.randint(int(x_lower), int(x_upper))
-        #     y = random.randint(int(y_lower), int(y_upper))
-        #     theta = (random.random()*2*math.pi)-math.pi
-        #     new_particle = Particle(x, y, theta, 1)
-        #     new_particle_cloud.append(new_particle)
+        # Draw some of the new particles completely randomly
+        for _ in range(num_random_particles):
+            x = random.uniform(x_lower, x_upper)
+            y = random.uniform(y_lower, y_upper)
+            theta = (random.random()*2*math.pi)-math.pi
+            new_particle = Particle(x, y, theta, float(1))
+            new_particle_cloud.append(new_particle)
 
-        # # Draw 1/3 of the new particles from the existing particle cloud
-        # reselected_particles = draw_random_sample(self.particle_cloud, weights_array, self.n_particles) # int(self.n_particles // 3)
-        # new_particle_cloud.extend(reselected_particles)
+        # Calculate remaining number of particles to sample
+        num_remaining_particles = self.n_particles - num_random_particles
 
-        # # Calculate remaining number of particles to sample
-        num_remaining_particles = self.n_particles #- 2*int(self.n_particles // 10)
-
-        # Draw 1/3 of the new particles randomly in the vicinity of existing particles
+        # Draw the rest of the new particles randomly in the vicinity of existing particles
         reference_particles = draw_random_sample(self.particle_cloud, weights_array, num_remaining_particles)
         for particle in reference_particles:
             max_attempts = 100
@@ -347,9 +346,6 @@ class ParticleFilter(Node):
             y = xy_theta[1] + np.random.normal(0, self.sampling_xy_noise_std_dev)
             theta = np.random.uniform(0, 2 * np.pi)
             self.particle_cloud.append(Particle(x, y, theta))
-        # TODO create particles
-        # This runs on the first loop of the algorithm
-        # maybe later initialize particles randomly
 
         self.normalize_particles()
         self.update_robot_pose()
