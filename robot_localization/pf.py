@@ -188,10 +188,10 @@ class ParticleFilter(Node):
 
 
     def update_robot_pose(self):
-        """ Update the estimate of the robot's pose given the updated particles.
-            There are two logical methods for this:
-                (1): compute the mean pose
-                (2): compute the most likely pose (i.e. the mode of the distribution)
+        """
+        Update the estimate of the robot's pose by selecting the particle with the highest weight.
+
+        This estimate is stored in self.robot_pose.
         """
         # first make sure that the particle weights are normalized
         self.normalize_particles()
@@ -212,10 +212,11 @@ class ParticleFilter(Node):
             self.get_logger().warn("Can't set map->odom transform since no odom data received")
 
     def update_particles_with_odom(self):
-        """ Update the particles using the newly given odometry pose.
-            The function computes the value delta which is a tuple (x,y,theta)
-            that indicates the change in position and angle between the odometry
-            when the particles were last updated and the current odometry.
+        """
+        Update the particle positions using odometry data.
+
+        Since the particles are defined in the world frame, the odometry data is first converted 
+        into the world frame before it is used to update the particles.
         """
         new_odom_xy_theta = self.transform_helper.convert_pose_to_xy_and_theta(self.odom_pose)
         # compute the change in x,y,theta since our last update
@@ -236,8 +237,6 @@ class ParticleFilter(Node):
         d = math.sqrt(x**2 + y**2)
 
         for particle in self.particle_cloud:
-            # x_rotated = math.cos(particle.theta) * x - math.sin(particle.theta) * y
-            # y_rotated = math.sin(particle.theta) * x + math.cos(particle.theta) * y
 
             # Calculate the heading of the robot's movement vector relative to its previous heading
             # This is not the same as the the change in theta
@@ -252,17 +251,17 @@ class ParticleFilter(Node):
             particle_xy_new[0] = math.cos(particle.theta + theta_turn) * movement_vector[0] - math.sin(particle.theta + theta_turn) * movement_vector[1]
             particle_xy_new[1] = math.sin(particle.theta + theta_turn) * movement_vector[0] + math.cos(particle.theta + theta_turn) * movement_vector[1]
 
-
-            # TODO add back noise when done debugging!
-            particle.x += particle_xy_new[0] #+ np.random.normal(0, self.odom_update_noise_std_dev)
-            particle.y += particle_xy_new[1] #+ np.random.normal(0, self.odom_update_noise_std_dev)
-            particle.theta += theta #+ np.random.normal(0, self.odom_update_noise_std_dev)
+            # Add noise
+            particle.x += particle_xy_new[0] + np.random.normal(0, self.odom_update_noise_std_dev)
+            particle.y += particle_xy_new[1] + np.random.normal(0, self.odom_update_noise_std_dev)
+            particle.theta += theta + np.random.normal(0, self.odom_update_noise_std_dev)
 
     def resample_particles(self):
-        """ Resample the particles according to the new particle weights.
-            The weights stored with each particle should define the probability that a particular
-            particle is selected in the resampling step.  You may want to make use of the given helper
-            function draw_random_sample in helper_functions.py.
+        """
+        Resample the particles according to their weights.
+
+        Particles with larger weights are more likely to be resampled from. Additionally, a few 
+        particles are randomly generated somewhere on the map.
         """
         self.normalize_particles()
         new_particle_cloud = []
@@ -299,29 +298,32 @@ class ParticleFilter(Node):
         self.particle_cloud = new_particle_cloud
 
     def update_particles_with_laser(self, r, theta):
-        """ Updates the particle weights in response to the scan data
-            r: the distance readings to obstacles
-            theta: the angle relative to the robot frame for each corresponding reading 
+        """
+        Update the particle weights in response to the scan data.
+
+        Args:
+            r: (float) the distance readings to obstacles
+            theta: (float) (degrees) the angle relative to the robot frame for each corresponding reading
         """
         # print("Particle weights before: ", [particle.w for particle in self.particle_cloud[:10]])
 
-        # # Calculate the difference between the distance from the nearest obstacle in the scan and in the map for each particle
-        # min_dist_diffs = []
-        # min_dist_scan = min(r) # minimum lidar value from robot scan
-        # min_dist_scan_angle = r.index(min_dist_scan)
+        # Calculate the difference between the distance from the nearest obstacle in the scan and in the map for each particle
+        min_dist_diffs = []
+        min_dist_scan = min(r) # minimum lidar value from robot scan
+        min_dist_scan_angle = r.index(min_dist_scan)
 
-        # print("laser scane r", r)
+        # print("laser scan r", r)
         # print("min dist scan angle", min_dist_scan_angle)
-        # for particle in self.particle_cloud:
-        #     min_dist_particle = self.occupancy_field.get_closest_obstacle_distance(particle.x, particle.y)
-        #     min_dist_diffs.append(abs(min_dist_scan - min_dist_particle))
+        for particle in self.particle_cloud:
+            min_dist_particle = self.occupancy_field.get_closest_obstacle_distance(particle.x, particle.y)
+            min_dist_diffs.append(abs(min_dist_scan - min_dist_particle))
 
-        # # Set the weight of each particle according to how different the obstacle distances are
-        # max_diff = max(min_dist_diffs)
-        # for i in range(self.n_particles):
-        #     # The particle with the highest obstacle distance difference from the scan will have a weight of zero
-        #     # Other particles will have higer weights
-        #     self.particle_cloud[i].w = max_diff-min_dist_diffs[i]
+        # Set the weight of each particle according to how different the obstacle distances are
+        max_diff = max(min_dist_diffs)
+        for i in range(self.n_particles):
+            # The particle with the highest obstacle distance difference from the scan will have a weight of zero
+            # Other particles will have higer weights
+            self.particle_cloud[i].w = max_diff-min_dist_diffs[i]
 
         # print("Particle weights after update: ", [particle.w for particle in self.particle_cloud[:10]])
 
@@ -332,10 +334,14 @@ class ParticleFilter(Node):
         self.initialize_particle_cloud(msg.header.stamp, xy_theta)
 
     def initialize_particle_cloud(self, timestamp, xy_theta=None):
-        """ Initialize the particle cloud.
-            Arguments
-            xy_theta: a triple consisting of the mean x, y, and theta (yaw) to initialize the
-                      particle cloud around.  If this input is omitted, the odometry will be used """
+        """ 
+        Initialize the particle cloud.
+        
+        Args:
+            timestamp: Unused, but this was in the template code so we kept it.
+            xy_theta: A triple consisting of the mean x, y, and theta (yaw) to initialize the
+                      particle cloud around. If this input is omitted, the odometry will be used.
+        """
         if xy_theta is None:
             xy_theta = self.transform_helper.convert_pose_to_xy_and_theta(self.odom_pose)
         self.particle_cloud = []
@@ -351,8 +357,9 @@ class ParticleFilter(Node):
         self.update_robot_pose()
 
     def normalize_particles(self):
-        """ Make sure the particle weights define a valid distribution (i.e. sum to 1.0) """
-        # TODO: implement this
+        """ 
+        Normalize the particle weights so that they define a valid distribution (i.e. sum to 1.0).
+        """
         # Take all the weights, add them, then divide each weight by the sum
         weight_sum = sum(particle.w for particle in self.particle_cloud)
         for particle in self.particle_cloud:
