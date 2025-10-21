@@ -305,27 +305,21 @@ class ParticleFilter(Node):
             r: (float) the distance readings to obstacles
             theta: (float) (degrees) the angle relative to the robot frame for each corresponding reading
         """
-        # print("Particle weights before: ", [particle.w for particle in self.particle_cloud[:10]])
-
-        # Calculate the difference between the distance from the nearest obstacle in the scan and in the map for each particle
-        min_dist_diffs = []
-        min_dist_scan = min(r) # minimum lidar value from robot scan
-        min_dist_scan_angle = r.index(min_dist_scan)
-
-        # print("laser scan r", r)
-        # print("min dist scan angle", min_dist_scan_angle)
         for particle in self.particle_cloud:
-            min_dist_particle = self.occupancy_field.get_closest_obstacle_distance(particle.x, particle.y)
-            min_dist_diffs.append(abs(min_dist_scan - min_dist_particle))
-
-        # Set the weight of each particle according to how different the obstacle distances are
-        max_diff = max(min_dist_diffs)
-        for i in range(self.n_particles):
-            # The particle with the highest obstacle distance difference from the scan will have a weight of zero
-            # Other particles will have higer weights
-            self.particle_cloud[i].w = max_diff-min_dist_diffs[i]
-
-        # print("Particle weights after update: ", [particle.w for particle in self.particle_cloud[:10]])
+            diff_sum = 0
+            for distance in r:
+                # convert theta to radians
+                theta *= math.pi/180.0
+                delta_x = r*math.cos(theta)
+                delta_y = r*math.sin(theta)
+                new_x = particle.x + delta_x
+                new_y = particle.y + delta_y
+                # the closer this value is to zero, the higher weight the particle should have
+                diff = self.occupancy_field.get_closest_obstacle_distance(new_x, new_y)
+                diff_sum += diff
+            diff_sum /= self.n_particles
+            particle.w = diff_sum #note that this is the inverse of what we want---higher error equals higher weight
+            # add some stochastic noise to the weight of each particle?
 
     def update_initial_pose(self, msg):
         """ Callback function to handle re-initializing the particle filter based on a pose estimate.
