@@ -308,11 +308,11 @@ class ParticleFilter(Node):
         for particle in self.particle_cloud:
             diff_sum_array = []
             diff_sum = 0
-            for distance in r:
+            for i in range(len(r)):
                 # convert theta to radians
-                theta *= math.pi/180.0
-                delta_x = r*math.cos(theta)
-                delta_y = r*math.sin(theta)
+                theta[i] *= math.pi/180.0
+                delta_x = r[i]*math.cos(theta[i])
+                delta_y = r[i]*math.sin(theta[i])
                 new_x = particle.x + delta_x
                 new_y = particle.y + delta_y
                 # the closer this value is to zero, the higher weight the particle should have
@@ -323,6 +323,9 @@ class ParticleFilter(Node):
         diff_sum_max = max(diff_sum_array)
         for i in range(self.n_particles):
             self.particle_cloud[i].w = diff_sum_max-diff_sum_array[i]
+        weights_array = [particle.w for particle in self.particle_cloud]
+        print(weights_array)
+        print("????????????")
     
 
     def update_initial_pose(self, msg):
