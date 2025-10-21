@@ -306,6 +306,7 @@ class ParticleFilter(Node):
             theta: (float) (degrees) the angle relative to the robot frame for each corresponding reading
         """
         for particle in self.particle_cloud:
+            diff_sum_array = []
             diff_sum = 0
             for distance in r:
                 # convert theta to radians
@@ -318,8 +319,11 @@ class ParticleFilter(Node):
                 diff = self.occupancy_field.get_closest_obstacle_distance(new_x, new_y)
                 diff_sum += diff
             diff_sum /= self.n_particles
-            particle.w = diff_sum #note that this is the inverse of what we want---higher error equals higher weight
-            # add some stochastic noise to the weight of each particle?
+            diff_sum_array.append(diff_sum)
+        diff_sum_max = max(diff_sum_array)
+        for i in range(self.n_particles):
+            self.particle_cloud[i].w = diff_sum_max-diff_sum_array[i]
+    
 
     def update_initial_pose(self, msg):
         """ Callback function to handle re-initializing the particle filter based on a pose estimate.
