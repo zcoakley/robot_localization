@@ -1,3 +1,4 @@
-This is a readme that explains what each of the bag files are.
+This is a collection of bag files for the particle filter project.
 
-(how they were collected, what you learn from the results, etc.)
+```INSERT FINAL BAG FILE NAME HERE```: A working run of our particle filter. This can be visualized by running rviz as you play the bag file.
+```macfirst_floor_take_1``` and ```macfirst_floor_take_2```: Used for testing and debugging. Contain sensor data from runs with the Turtlebot.
