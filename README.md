@@ -6,6 +6,8 @@
 
 The goal of this project was to learn about the particle filter, a fundamental concept in robot localization. A particle filter is an algorithm that determines the location of a robot within a known map by maintaining a set of guesses of where the robot is (the guesses are known as particles). It prunes this set of guesses by comparing the robot's LIDAR data to what each particle "sees" based on its location within the known map. We implemented a working particle filter in ROS that works with a Neato robot.
 
+<img src="images/odom_figure.jpg" alt="Figure 1: Odom Transform" width="500"/>
+
 ## Key Steps of a Particle Filter
 
 Our particle filter follows this set of steps:
