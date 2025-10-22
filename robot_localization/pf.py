@@ -78,7 +78,7 @@ class ParticleFilter(Node):
         self.odom_frame = "odom"        # the name of the odometry coordinate frame
         self.scan_topic = "scan"        # the topic where we will get laser scans from 
 
-        self.n_particles = 300          # the number of particles to use
+        self.n_particles = 1000          # the number of particles to use
 
         self.d_thresh = 0.2             # the amount of linear movement before performing an update
         self.a_thresh = math.pi/6       # the amount of angular movement before performing an update
@@ -89,7 +89,7 @@ class ParticleFilter(Node):
         self.resampling_dist_std_dev = 0.05
         self.resampling_angle_std_dev = 0.2
         # The portion of particles to be resampled randomly within the map
-        self.resampling_portion_random = 0.05
+        self.resampling_portion_random = 0.0
 
         # pose_listener responds to selection of a new approximate robot location (for instance using rviz)
         self.create_subscription(PoseWithCovarianceStamped, 'initialpose', self.update_initial_pose, 10)
@@ -171,7 +171,6 @@ class ParticleFilter(Node):
             # print("Particle weights at init: ", [particle.w for particle in self.particle_cloud[:10]])
             # print("laser scane r", r)
             # print("laser scan r length", len(r))
-            
         elif self.moved_far_enough_to_update(new_odom_xy_theta):
             # we have moved far enough to do an update!
             self.update_particles_with_odom()    # update based on odometry
@@ -305,29 +304,44 @@ class ParticleFilter(Node):
             r: (float) the distance readings to obstacles
             theta: (float) (degrees) the angle relative to the robot frame for each corresponding reading
         """
+        # For each particle, update the weight by comparing expected distances
+        for i, angle in enumerate(theta):
+            theta[i] += math.pi/2
+            theta[i] = 0-angle
+            #print(math.degrees(angle))
+        #print("\ndone\n")
+        diff_mean_array = []
         for particle in self.particle_cloud:
-            diff_sum_array = []
+            theta_copy = theta.copy()
+            for i, angle in enumerate(theta_copy):
+                theta_copy[i] = particle.theta-angle
+            # This is here to account for values in r that are 'inf' or 'nan'; we cannot just assume num_diffs is the number of points in the scan
+            num_diffs = 0 
             diff_sum = 0
             for i in range(len(r)):
-                # convert theta to radians
-                theta[i] *= math.pi/180.0
-                delta_x = r[i]*math.cos(theta[i])
-                delta_y = r[i]*math.sin(theta[i])
-                new_x = particle.x + delta_x
-                new_y = particle.y + delta_y
-                # the closer this value is to zero, the higher weight the particle should have
-                diff = self.occupancy_field.get_closest_obstacle_distance(new_x, new_y)
-                diff_sum += diff
-            diff_sum /= self.n_particles
-            diff_sum_array.append(diff_sum)
-        diff_sum_max = max(diff_sum_array)
-        for i in range(self.n_particles):
-            self.particle_cloud[i].w = diff_sum_max-diff_sum_array[i]
-        weights_array = [particle.w for particle in self.particle_cloud]
-        print(weights_array)
-        print("????????????")
-    
-
+                if not (math.isinf(r[i]) or math.isnan(r[i])):
+                    # Seperate out the x and y components of the distances to each point in the laser scan
+                    delta_x = r[i]*math.cos(theta_copy[i])
+                    delta_y = r[i]*math.sin(theta_copy[i])
+                    # print("Delta x: ", delta_x, "Delta y:", delta_y)
+                    # Compute the location (cartesian coords) of each scan point in the world frame; note wraparound angles may be tricky
+                    new_x = particle.x + delta_x
+                    new_y = particle.y + delta_y
+                    # print("New x: ", new_x, "New y:", new_y)
+                    # The closer this value is to zero, the higher weight the particle should have
+                    diff = self.occupancy_field.get_closest_obstacle_distance(new_x, new_y)
+                    if not (math.isinf(diff) or math.isnan(diff)):
+                        diff_sum += diff
+                        num_diffs += 1
+                    # print("Diff: ", diff)
+                    # print("Diff sum: ", diff_sum)
+            if num_diffs != 0:
+                diff_mean = diff_sum/num_diffs
+                diff_mean_array.append(diff_mean)
+                #print("Diff mean: ", diff_mean)
+                particle.w = 1/diff_mean
+        #print([particle.w for particle in self.particle_cloud])
+   
     def update_initial_pose(self, msg):
         """ Callback function to handle re-initializing the particle filter based on a pose estimate.
             These pose estimates could be generated by another ROS Node or could come from the rviz GUI """
